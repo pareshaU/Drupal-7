@@ -1,0 +1,5 @@
+name = Fix cache page expire
+description = Custom module to fix cache issues
+package = General
+core = 7.x
+version = "7.x"

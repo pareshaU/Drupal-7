@@ -1,0 +1,67 @@
+
+#dashboard .user-dashboard-region div.block h2{
+	background: transparent;
+	display:none;
+}
+
+#dashboard .user-dashboard-region .block{
+	border: none;
+	clear: both;
+	height:70px;
+}
+
+#dashboard div.user-dashboard-region {
+	float: left;
+	min-height: 1px;
+}
+
+#dashboard .user-dashboard-region{
+
+    background: transparent;
+    float :left;
+    display: inline-block;
+    width:84px;
+}
+
+#dashboard .user-dashboard-region .region{
+   height:64px;
+}
+
+#dashboard div.all-regions{
+    height:290px;
+    width:55%;
+}
+
+.page-user-dashboard #dashboard #disabled-blocks h2 {
+  display:none;
+}
+
+.page-user-dashboard #dashboard #disabled-blocks .block .content,
+.page-user-dashboard #dashboard .ui-sortable-helper .content {
+  display:block;
+}
+
+.page-user-dashboard #dashboard #disabled-blocks .block {
+  background:none;
+  width:80px;
+}
+
+.page-user-dashboard #dashboard.customize-inactive #disabled-blocks .block:hover {
+    background: none;
+}
+
+.page-user-dashboard #dashboard #disabled-blocks .region {
+    background-color: #e0e0d8;
+    border: 1px solid #ccc;
+    min-height: 40px;
+    padding: 10px;
+}
+
+#dashboard.user-dashboard-homepage .user-dashboard-region {
+  width:16.6%;
+  text-align:center;
+}
+
+#dashboard.user-dashboard-homepage div.all-regions {
+  width:100%;
+}

@@ -1,0 +1,137 @@
+<?php
+/**
+ * @file
+ * This module defines articles blocks functions of website.
+ */
+
+/**
+ * Implements hook_init().
+ */
+function fix_cache_expire_init() {
+
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function fix_cache_expire_menu()
+{
+  $items['admin/config/development/performance/memcache'] = array(
+    'title' => 'Memcache',
+    'description' => "Memcache",
+    'page callback' => 'custom_memcache_view',
+    'page arguments' => array('view'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 11,
+  );
+
+  $items['admin/config/development/performance/memcache/flush'] = array(
+    'title' => 'Memcache Flush',
+    'description' => "Memcache",
+    'page arguments' => array('flush'),
+    'page callback' => 'custom_memcache_view',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 11,
+  );
+  return $items;
+}
+
+/**
+ * This function used for memcache flush
+ */
+function custom_memcache_view($arg = '') {
+global $conf;
+$memcachse_server_detail = explode(':', key($conf['memcache_servers']));
+
+if (isset($memcachse_server_detail) && $memcachse_server_detail['0'] != '' & $memcachse_server_detail['1'] != '') {
+$memcache_obj = new Memcache();
+$memcache_obj->addServer($memcachse_server_detail['0'], $memcachse_server_detail['1']);
+    if ($arg != 'flush') {
+      drupal_set_message(l(t("Click here to Flush ALL Memcached Cache"),'admin/config/development/performance/memcache/flush'),'warning');
+    }
+    $flag = 0;
+    $allslabs = $memcache_obj->getExtendedStats('slabs');
+    $items = $memcache_obj->getExtendedStats('items');
+    foreach ($allslabs as $server => $slabs) {
+        foreach ($slabs as $slabid => $slabmeta) {
+            $message .= "<br/>Slab id <b>" . $slabid . "</b>:<br/>";
+            $message .= "<ul>";
+            $cdump = $memcache_obj->getExtendedStats('cachedump',(int)$slabid);
+            foreach ($cdump as $keys => $arrval) {
+                if (!is_array($arrval)) continue;
+            $message .= "<li><ul>";
+                foreach ($arrval as $k => $v) {
+                    if ($arg == 'flush') {
+                    $memcache_obj->delete($k);
+                    }
+                    $message .= "<li>";
+                    $message .= $k . '<br/>';
+                    $message .= "</li>";
+                    $flag++;
+                }
+            $message .= "</ul></li>";
+                if ($arg != 'flush') {
+                }
+            }
+            $message .= "</ul>";
+        }
+    }
+
+    if ($arg == 'flush') {
+        drupal_goto("admin/config/development/performance/memcache");
+    }
+    if ($flag == 0) {
+      drupal_set_message(t("There are no cache available or Memcache connectivity issue, please refresh this page"));
+    }
+} else {
+  drupal_set_message(t('Memcache settins not exisits in settings.php file'),'error');
+}
+return t('Available caches Details:') . ' <br/>' . $message;
+}
+
+/**
+ * Implements hook_node_update().
+ *
+ * Purpose of this function to delete Memcache when particular node is updated.
+ */
+function fix_cache_expire_node_update($node) {
+  if ($node->path['alias'] != '') {
+    custom_memcache_flush_by_key($node->path['alias']);
+  } else {
+    custom_memcache_flush_by_key($node->path['source']);
+  }
+}
+
+
+/**
+ * This function used for memcache flush
+ */
+function custom_memcache_flush_by_key($url_key = '') {
+global $conf;
+$memcachse_server_detail = explode(':', key($conf['memcache_servers']));
+if (isset($memcachse_server_detail) && $memcachse_server_detail['0'] != '' & $memcachse_server_detail['1'] != '') {
+    $memcache_obj = new Memcache();
+    $memcache_obj->addServer($memcachse_server_detail['0'], $memcachse_server_detail['1']);
+    $flag = 0;
+    $allslabs = $memcache_obj->getExtendedStats('slabs');
+    $items = $memcache_obj->getExtendedStats('items');
+    foreach ($allslabs as $server => $slabs) {
+        foreach ($slabs as $slabid => $slabmeta) {
+            $cdump = $memcache_obj->getExtendedStats('cachedump',(int)$slabid);
+            foreach ($cdump as $keys => $arrval) {
+                if (!is_array($arrval)) continue;
+                foreach ($arrval as $k => $v) {
+                    if (strpos(urldecode($k), $url_key) !== false) {
+                        $memcache_obj->delete($k);
+                        watchdog('cucstom_cache_expire', 'Memcache cleared for page- ' . urldecode($k));
+                    }
+                }
+            }
+        }
+    }
+}
+return;
+}

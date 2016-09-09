@@ -1,0 +1,280 @@
+<?php
+/**
+ * @file
+ * This module defines yelp functions for resource locator.
+ */
+
+define('CONSUMER_KEY', variable_get('CONSUMER_KEY', 'CONSUMER_KEY'));
+define('CONSUMER_SECRET', variable_get('CONSUMER_SECRET', 'CONSUMER_SECRET'));
+define('TOKEN', variable_get('TOKEN', 'TOKEN'));
+define('TOKEN_SECRET', variable_get('TOKEN_SECRET', 'TOKEN_SECRET'));
+define('API_HOST', 'api.yelp.com');
+define('DEFAULT_TERM', '');
+define('DEFAULT_LOCATION', '');
+define('SEARCH_LIMIT', '20');
+define('SEARCH_PATH', '/v2/search/');
+define('BUSINESS_PATH', '/v2/business/');
+
+/**
+ * Implements hook_theme().
+ */
+function yelp_theme($existing, $type, $theme, $path) {
+  return array(
+    'yelp' => array(
+      'variables' => array('data' => NULL),
+      'template' => 'yelp',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function yelp_menu() {
+    $items = array();
+
+    $items['admin/config/people/yelp'] = array(
+      'title' => 'Yelp',
+      'description' => 'Configuration for Yelp module.',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('yelp_admin_form'),
+      'access arguments' => array('administer users'),
+      'type' => MENU_NORMAL_ITEM,
+    );
+
+    $items['resource-locator'] = array(
+      'title' => 'Resouce locator',
+      'description' => 'Resouce locator.',
+      'page callback' => 'yelp_get_resource_locator',
+      'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
+    );
+
+   $items['yelp/term/autocomplete'] = array(
+      'title' => 'Custom Autocomplete',
+      'page callback' => 'yelp_term_autocomplete',
+      'access callback' => TRUE,
+      'type' => MENU_CALLBACK,
+    );
+
+    return $items;
+}
+
+/**
+ * Implements yelp_term_autocomplete().
+ */
+function yelp_term_autocomplete() {
+    $termes = taxonomy_vocabulary_get_names();
+    $vocabulary = taxonomy_get_tree($termes['yelp_categories']->vid);
+    $list = array();
+    foreach ($vocabulary as $taxonomy) {
+           $list[$taxonomy->name] = $taxonomy->name;
+    }
+    print drupal_json_encode($list);
+    exit();
+}
+
+
+/**
+ * Implements hook_admin_form().
+ */
+function yelp_admin_form($form,&$form_state) {
+  $form['yelp_consumer_key'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Consumer key'),
+    '#length' => 60,
+    '#default_value' => variable_get('CONSUMER_KEY', 'CONSUMER_KEY'),
+    '#max_length' => 60,
+    '#required' => TRUE,
+  );
+
+  $form['yelp_consumer_secret'] = array (
+    '#type' => 'textfield',
+    '#title' => t('Consumer Secret'),
+    '#default_value' => variable_get('CONSUMER_SECRET', 'CONSUMER_SECRET'),
+    '#length' => 60,
+    '#max_length' => 60,
+    '#required' => TRUE,
+  );
+
+  $form['yelp_token'] = array (
+    '#type' => 'textfield',
+    '#title' => t('Token'),
+    '#length' => 60,
+    '#default_value' => variable_get('TOKEN', 'TOKEN'),
+    '#max_length' => 60,
+    '#required' => TRUE,
+  );
+
+  $form['yelp_token_secret'] = array (
+    '#type' => 'textfield',
+    '#title' => t('Token Secret'),
+    '#length' => 60,
+    '#default_value' => variable_get('TOKEN_SECRET', 'TOKEN_SECRET'),
+    '#max_length' => 60,
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implements hook_get_form().
+ */
+function yelp_get_form($form, &$form_state) {
+  
+  $form['term'] = array(
+    '#type' => 'select',
+    '#name' => 'term',
+    '#title' => t('Category'),
+    '#options' => get_myterms(),
+    '#length' => 60,
+    '#max_length' => 60,
+    '#required' => TRUE,
+    '#default_value' => isset($_GET['category']) ? $_GET['category'] : '',
+  );
+
+  $form['location'] = array (
+    '#type' => 'textfield',
+    '#name' => 'location',
+    '#title' => t('Location'),
+    '#length' => 60,
+    '#max_length' => 60,
+    '#required' => TRUE,
+    '#default_value' => isset($_GET['location']) ? $_GET['location'] : '',
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+    '#weight' => '10',
+  );
+
+  $form['#attributes']['method'] = 'POST';
+
+  return $form;
+}
+
+/**
+ * Implements hook_form_validate().
+ */
+function get_myterms() {
+  $termes = taxonomy_vocabulary_get_names();
+  $vids = taxonomy_get_tree($termes['yelp_categories']->vid);
+  if (isset($vids)) {
+     foreach ($vids as $terms) {
+        $output[$terms->name] = $terms->name;
+     }
+     return $output;
+  }
+}
+
+/**
+ * Implements hook_get_resource_locator().
+ */
+function yelp_get_resource_locator() {
+  $output = '';
+  $term = isset($_GET['category']) ? $_GET['category'] : '';
+  $location = isset($_GET['location']) ? $_GET['location'] : '';
+  $form = drupal_get_form('yelp_get_form');
+  $output .= drupal_render($form);
+  $output .= yelp_print_results($term, $location);
+  return $output;
+
+}
+
+/**
+ * Implements hook_submit().
+ */
+function yelp_get_form_submit($form, &$form_state) {
+  $term = $form_state['values']['term'];
+  $location = $form_state['values']['location'];
+  drupal_goto('resource-locator', array('query' => array('category' => $term, 'location' => $location)));
+}
+
+/**
+ * Implements yelp custom function().
+ */
+function yelp_print_results($term, $location) {
+  include_once('lib/OAuth.php');
+  $term = isset($term) ? $term : '';
+  $location = isset($location) ? $location : '';
+  return query_api($term, $location);
+}
+
+/**
+ * Implements yelp function().
+ */
+function request($host, $path) {
+    $unsigned_url = "http://" . $host . $path;
+
+    // Token object built using the OAuth library
+    $token = new OAuthToken(TOKEN, TOKEN_SECRET);
+
+    // Consumer object built using the OAuth library
+    $consumer = new OAuthConsumer(CONSUMER_KEY, CONSUMER_SECRET);
+
+    // Yelp uses HMAC SHA1 encoding
+    $signature_method = new OAuthSignatureMethod_HMAC_SHA1();
+
+    $oauthrequest = OAuthRequest::from_consumer_and_token(
+        $consumer,
+        $token,
+        'GET',
+        $unsigned_url
+    );
+
+    // Sign the request
+    $oauthrequest->sign_request($signature_method, $consumer, $token);
+
+    // Get the signed URL
+    $signed_url = $oauthrequest->to_url();
+
+    // Send Yelp API Call
+    $ch = curl_init($signed_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, 0);
+    $data = curl_exec($ch);
+    curl_close($ch);
+
+    return $data;
+}
+
+/**
+ * Query the Search API by a search term and location
+ */
+function search($term, $location) {
+    $url_params = array();
+    $url_params['term'] = $term ? : DEFAULT_TERM;
+    $url_params['location'] = $location ? : DEFAULT_LOCATION;
+    $url_params['limit'] = SEARCH_LIMIT;
+    $search_path = SEARCH_PATH . "?" . http_build_query($url_params);
+
+    return request(API_HOST, $search_path);
+}
+
+/**
+ * Query the Business API by business_id
+ */
+function get_business($business_id) {
+    $business_path = BUSINESS_PATH . $business_id;
+
+    return request(API_HOST, $business_path);
+}
+
+/**
+ * Queries the API by the input values from the user
+ */
+function query_api($term, $location) {
+    $response = json_decode(search($term, $location));
+    // $business_id = $response->businesses[0]->id;
+    // $response = get_business($business_id);
+    $data = (array) $response;
+    if ($term != '' && $location != '' && isset($data['error']->id) && ($data['error']->id == 'UNAVAILABLE_FOR_LOCATION' || $data['error']->id == 'MISSING_PARAMETER')) {
+		  $a = 'no results found';
+		  return theme('yelp',array('a' => $a));
+    }
+	  else {
+		  return theme('yelp', $data);
+	  }
+}
