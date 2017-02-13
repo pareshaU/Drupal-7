@@ -1,0 +1,108 @@
+<?php 
+
+/**
+ * Batch insert process.
+ */function batch_insert_users_data($data){
+  if (class_exists('MongoClient')) {
+    $connection = new MongoClient();
+  }
+  else {
+    $connection = new Mongo();
+  }
+  $dbname = $connection->selectDB('drupal');
+  $users = $dbname->users; // collection name
+  $users_data = $users->batchInsert($data);
+  return $users_data;
+}
+
+
+/**
+ * Import users data from CSV file to MongoDB collection.
+ */
+function readAllUsersCSV($filename = 'allusers.csv', $today_date = NULL) {
+  $path = drupal_get_path('module', 'mymodule');
+  if ($today_date) {
+    if (class_exists('MongoClient')) {
+      $connection = new MongoClient();
+    }
+    else {
+      $connection = new Mongo();
+    }
+    $dbname = $connection->selectDB('drupal');
+    $users = $dbname->users;
+    $pattern = array('created_date' => $today_date);
+    $users->remove($pattern);
+  }
+  ini_set('auto_detect_line_endings', TRUE);
+  $handle = fopen($path . '/allusers_csv/' . $filename, 'r');
+  $csvdata = array();
+  while (($data = fgetcsv($handle) ) !== FALSE ) {
+    $csvdata[] = array(
+      "uid" => $data[0],
+      "username"  => $data[2],
+      "password" => $data[3],
+      "email" => $data[4],
+      "created_date" => $data[5],
+      "phone" => $data[6],
+      "status" => $data[7],
+    );
+  }
+  $batch_result = batch_insert_users_data($csvdata);
+  $batch_status = ($batch_result['ok']) ? TRUE : FALSE;
+  ini_set('auto_detect_line_endings', FALSE);
+  return $batch_status;
+}
+
+
+/**
+ * Fetch information of Users for respective Date and UID.
+ * @Param : UID
+ * @Param : Created Date
+ */
+function get_users_details($uid, $c_dt) {
+  // c_date should be in dd-mm-YYYY
+  $created_date = date('d-m-Y', strtotime($c_dt));
+  $sort  = array('created_date' => 1);
+  if (class_exists('MongoClient')) {
+    $connection = new MongoClient();
+  }
+  else {
+    $connection = new Mongo();
+  }
+  $dbname = $connection->selectDB('drupal');
+  $users_collection = $dbname->users;
+  $pattern = array('$and' => array(array('uid' => $uid), array('created_date' => $created_date)));
+  $users_details_results = $users_collection->find($pattern)->sort($sort);
+  $count = $users_details_results->count();
+  if ($count > 0) {
+    return $users_details_results;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Set User status active/block to respective date.
+ * @Param : UID
+ * @Param : Date
+ * @Param : User Status
+ */
+function set_user_status($uid, $sample_dt, $user_status) {
+  // sample dt should be in YYYY-mm-dd
+  if (class_exists('MongoClient')) {
+    $connection = new MongoClient();
+  }
+  else {
+    $connection = new Mongo();
+  }
+  $dbname = $connection->selectDB('drupal');
+  $users_collection = $dbname->users;
+  $result = $users_collection->update(array('$and'=>array((array("uid" => $uid)), array("created_date" => $sample_dt))), array('$set'=>array("status" => $user_status)));
+  if ($result) {
+    return $result;
+  }
+  else {
+    return FALSE;
+  }
+}
