@@ -38,6 +38,7 @@ function readAllUsersCSV($filename = 'allusers.csv', $today_date = NULL) {
   $csvdata = array();
   while (($data = fgetcsv($handle) ) !== FALSE ) {
     $csvdata[] = array(
+      "_id" => new MongoId(),
       "uid" => $data[0],
       "username"  => $data[2],
       "password" => $data[3],
